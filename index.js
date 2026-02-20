@@ -42,6 +42,11 @@ const commands = [
     .setName('stats')
     .setDescription('Affiche les statistiques des deux équipes')
     .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName('resetroles')
+    .setDescription('Retire les rôles d\'équipe à tous les membres')
+    .toJSON(),
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -230,6 +235,44 @@ client.on('interactionCreate', async (interaction) => {
       `${barre}\n\n` +
       `${statut}`
     );
+  }
+  //resetroles
+  if (interaction.commandName === 'resetroles') {
+    if (!interaction.member.permissions.has('Administrator')) {
+      return interaction.reply({ content: '❌ Tu dois être administrateur.', ephemeral: true });
+    }
+  
+    await interaction.deferReply({ ephemeral: true });
+  
+    try {
+      const guild = interaction.guild;
+      const role1 = guild.roles.cache.get(ROLE_1_ID);
+      const role2 = guild.roles.cache.get(ROLE_2_ID);
+  
+      if (!role1 || !role2) return interaction.editReply('❌ Rôles introuvables.');
+  
+      const members = await guild.members.fetch();
+  
+      const assigned = members.filter(m =>
+        !m.user.bot &&
+        (m.roles.cache.has(ROLE_1_ID) || m.roles.cache.has(ROLE_2_ID))
+      );
+  
+      if (assigned.size === 0) {
+        return interaction.editReply('✅ Aucun membre n\'a de rôle d\'équipe !');
+      }
+  
+      for (const [, member] of assigned) {
+        if (member.roles.cache.has(ROLE_1_ID)) await member.roles.remove(role1);
+        if (member.roles.cache.has(ROLE_2_ID)) await member.roles.remove(role2);
+      }
+  
+      interaction.editReply(`✅ **${assigned.size} membres réinitialisés !** Les rôles Papillons et Dragons ont été retirés.`);
+  
+    } catch (err) {
+      console.error('❌ Erreur /resetroles :', err);
+      interaction.editReply('❌ Une erreur est survenue.');
+    }
   }
 });
 
