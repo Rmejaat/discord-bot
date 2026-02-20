@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 const client = new Client({
   intents: [
@@ -17,6 +17,8 @@ const EMOJI_1 = process.env.EMOJI_1 || '🦋';
 const EMOJI_2 = process.env.EMOJI_2 || '🐉';
 const NOM_1 = process.env.NOM_1 || 'Papillons';
 const NOM_2 = process.env.NOM_2 || 'Dragons';
+const COULEUR_1 = process.env.COULEUR_1 || '#5865F2';
+const COULEUR_2 = process.env.COULEUR_2 || '#ED4245';
 
 // ==============================
 // COMMANDES SLASH
@@ -85,6 +87,30 @@ async function assignRole(member, role1, role2) {
 }
 
 // ==============================
+// MP AU NOUVEAU MEMBRE
+// ==============================
+async function envoyerMP(member, role) {
+  const estEquipe1 = role.id === ROLE_1_ID;
+  const emoji = estEquipe1 ? EMOJI_1 : EMOJI_2;
+  const nom = estEquipe1 ? NOM_1 : NOM_2;
+  const couleur = estEquipe1 ? COULEUR_1 : COULEUR_2;
+
+  const embed = new EmbedBuilder()
+    .setColor(couleur)
+    .setTitle(`${emoji} Bienvenue dans l'équipe ${nom} !`)
+    .setDescription(`Salut **${member.displayName}** ! Tu as été assigné à l'équipe **${nom}** sur **${member.guild.name}**. Bonne chance ! 🎉`)
+    .setThumbnail(member.user.displayAvatarURL())
+    .setTimestamp()
+    .setFooter({ text: member.guild.name, iconURL: member.guild.iconURL() });
+
+  try {
+    await member.send({ embeds: [embed] });
+  } catch (err) {
+    console.log(`⚠️ Impossible d'envoyer un MP à ${member.user.tag} (DMs fermés)`);
+  }
+}
+
+// ==============================
 // READY
 // ==============================
 client.once('ready', async () => {
@@ -104,6 +130,8 @@ client.on('guildMemberAdd', async (member) => {
     if (!role1 || !role2) return console.error('❌ Rôles introuvables');
 
     const assigned = await assignRole(member, role1, role2);
+    await envoyerMP(member, assigned);
+
     const emoji = assigned.id === ROLE_1_ID ? EMOJI_1 : EMOJI_2;
     console.log(`✅ ${member.user.tag} → "${assigned.name}" ${emoji}`);
   } catch (err) {
@@ -147,17 +175,24 @@ client.on('interactionCreate', async (interaction) => {
 
       for (const [, member] of unassigned) {
         const assigned = await assignRole(member, role1, role2);
+        await envoyerMP(member, assigned);
         assignedCount[assigned.name]++;
       }
 
       const finalCount1 = role1.members.filter(m => !m.user.bot).size;
       const finalCount2 = role2.members.filter(m => !m.user.bot).size;
 
-      interaction.editReply(
-        `✅ **${unassigned.size} membres assignés !**\n` +
-        `${EMOJI_1} ${NOM_1} : +${assignedCount[role1.name]} → **${finalCount1} total**\n` +
-        `${EMOJI_2} ${NOM_2} : +${assignedCount[role2.name]} → **${finalCount2} total**`
-      );
+      const embed = new EmbedBuilder()
+        .setColor('#57F287')
+        .setTitle('✅ Attribution terminée !')
+        .addFields(
+          { name: `${EMOJI_1} ${NOM_1}`, value: `+${assignedCount[role1.name]} → **${finalCount1} total**`, inline: true },
+          { name: `${EMOJI_2} ${NOM_2}`, value: `+${assignedCount[role2.name]} → **${finalCount2} total**`, inline: true },
+          { name: '👥 Membres assignés', value: `${unassigned.size}`, inline: true }
+        )
+        .setTimestamp();
+
+      interaction.editReply({ embeds: [embed] });
     } catch (err) {
       console.error('❌ Erreur /assignroles :', err);
       interaction.editReply('❌ Une erreur est survenue.');
@@ -172,6 +207,7 @@ client.on('interactionCreate', async (interaction) => {
     const roleId = choix === 'equipe1' ? ROLE_1_ID : ROLE_2_ID;
     const emoji = choix === 'equipe1' ? EMOJI_1 : EMOJI_2;
     const nom = choix === 'equipe1' ? NOM_1 : NOM_2;
+    const couleur = choix === 'equipe1' ? COULEUR_1 : COULEUR_2;
 
     const guild = interaction.guild;
     await guild.members.fetch();
@@ -180,29 +216,26 @@ client.on('interactionCreate', async (interaction) => {
     if (!role) return interaction.editReply('❌ Rôle introuvable.');
 
     const membres = role.members.filter(m => !m.user.bot);
+
     if (membres.size === 0) {
-      return interaction.editReply(`${emoji} L'équipe **${nom}** est vide pour l'instant.`);
+      const embed = new EmbedBuilder()
+        .setColor(couleur)
+        .setTitle(`${emoji} Équipe ${nom}`)
+        .setDescription('Cette équipe est vide pour l\'instant.')
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
     }
 
     const liste = membres.map(m => `• ${m.displayName}`).join('\n');
-    const contenu = `${emoji} **Équipe ${nom}** — ${membres.size} membre(s) :\n\n${liste}`;
 
-    if (contenu.length <= 2000) {
-      interaction.editReply(contenu);
-    } else {
-      const lignes = liste.split('\n');
-      let chunk = `${emoji} **Équipe ${nom}** — ${membres.size} membre(s) :\n\n`;
-      await interaction.editReply(`${emoji} **Équipe ${nom}** — ${membres.size} membre(s) :`);
+    const embed = new EmbedBuilder()
+      .setColor(couleur)
+      .setTitle(`${emoji} Équipe ${nom} — ${membres.size} membre(s)`)
+      .setDescription(liste.length <= 4096 ? liste : liste.substring(0, 4090) + '\n...')
+      .setTimestamp()
+      .setFooter({ text: `${membres.size} membre(s) au total` });
 
-      for (const ligne of lignes) {
-        if ((chunk + ligne + '\n').length > 2000) {
-          await interaction.followUp({ content: chunk });
-          chunk = '';
-        }
-        chunk += ligne + '\n';
-      }
-      if (chunk) await interaction.followUp({ content: chunk });
-    }
+    interaction.editReply({ embeds: [embed] });
   }
 
   // /stats
@@ -227,19 +260,23 @@ client.on('interactionCreate', async (interaction) => {
     const barre = `${EMOJI_1} ${'█'.repeat(blocs1)}${'░'.repeat(blocs2)} ${EMOJI_2}`;
 
     let statut;
-    if (count1 === count2) statut = '⚖️ **Égalité parfaite !**';
-    else if (count1 > count2) statut = `${EMOJI_1} **${NOM_1} en avance** de ${count1 - count2} membre(s)`;
-    else statut = `${EMOJI_2} **${NOM_2} en avance** de ${count2 - count1} membre(s)`;
+    if (count1 === count2) statut = '⚖️ Égalité parfaite !';
+    else if (count1 > count2) statut = `${EMOJI_1} **${NOM_1}** en avance de ${count1 - count2} membre(s)`;
+    else statut = `${EMOJI_2} **${NOM_2}** en avance de ${count2 - count1} membre(s)`;
 
-    interaction.editReply(
-      `📊 **Statistiques des équipes**\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `${EMOJI_1} **${NOM_1}** : ${count1} membre(s)\n` +
-      `${EMOJI_2} **${NOM_2}** : ${count2} membre(s)\n` +
-      `👥 **Total** : ${total} membre(s)\n\n` +
-      `${barre}\n\n` +
-      `${statut}`
-    );
+    const embed = new EmbedBuilder()
+      .setColor('#FEE75C')
+      .setTitle('📊 Statistiques des équipes')
+      .addFields(
+        { name: `${EMOJI_1} ${NOM_1}`, value: `**${count1}** membre(s)`, inline: true },
+        { name: `${EMOJI_2} ${NOM_2}`, value: `**${count2}** membre(s)`, inline: true },
+        { name: '👥 Total', value: `**${total}** membre(s)`, inline: true },
+        { name: 'Répartition', value: `\`\`\`${barre}\`\`\`` },
+        { name: 'Statut', value: statut }
+      )
+      .setTimestamp();
+
+    interaction.editReply({ embeds: [embed] });
   }
 
   // /resetroles
@@ -272,7 +309,13 @@ client.on('interactionCreate', async (interaction) => {
         if (member.roles.cache.has(ROLE_2_ID)) await member.roles.remove(role2);
       }
 
-      interaction.editReply(`✅ **${assigned.size} membres réinitialisés !** Les rôles ont été retirés.`);
+      const embed = new EmbedBuilder()
+        .setColor('#ED4245')
+        .setTitle('🔄 Réinitialisation terminée')
+        .setDescription(`Les rôles **${NOM_1}** et **${NOM_2}** ont été retirés à **${assigned.size}** membre(s).`)
+        .setTimestamp();
+
+      interaction.editReply({ embeds: [embed] });
     } catch (err) {
       console.error('❌ Erreur /resetroles :', err);
       interaction.editReply('❌ Une erreur est survenue.');
