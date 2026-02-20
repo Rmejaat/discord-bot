@@ -13,6 +13,10 @@ const ROLE_1_ID = process.env.ROLE_1_ID;
 const ROLE_2_ID = process.env.ROLE_2_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const CLIENT_ID = process.env.CLIENT_ID;
+const EMOJI_1 = process.env.EMOJI_1 || '🦋';
+const EMOJI_2 = process.env.EMOJI_2 || '🐉';
+const NOM_1 = process.env.NOM_1 || 'Papillons';
+const NOM_2 = process.env.NOM_2 || 'Dragons';
 
 // ==============================
 // COMMANDES SLASH
@@ -32,8 +36,8 @@ const commands = [
         .setDescription('Choisir l\'équipe')
         .setRequired(true)
         .addChoices(
-          { name: '🦋 Papillons', value: 'papillons' },
-          { name: '🐉 Dragons', value: 'dragons' }
+          { name: 'Équipe 1', value: 'equipe1' },
+          { name: 'Équipe 2', value: 'equipe2' }
         )
     )
     .toJSON(),
@@ -100,7 +104,8 @@ client.on('guildMemberAdd', async (member) => {
     if (!role1 || !role2) return console.error('❌ Rôles introuvables');
 
     const assigned = await assignRole(member, role1, role2);
-    console.log(`✅ ${member.user.tag} → "${assigned.name}"`);
+    const emoji = assigned.id === ROLE_1_ID ? EMOJI_1 : EMOJI_2;
+    console.log(`✅ ${member.user.tag} → "${assigned.name}" ${emoji}`);
   } catch (err) {
     console.error('❌ Erreur guildMemberAdd :', err);
   }
@@ -115,10 +120,10 @@ client.on('interactionCreate', async (interaction) => {
   // /assignroles
   if (interaction.commandName === 'assignroles') {
     if (!interaction.member.permissions.has('Administrator')) {
-      return interaction.reply({ content: '❌ Tu dois être administrateur.', ephemeral: true });
+      return interaction.reply({ content: '❌ Tu dois être administrateur.', flags: 64 });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 });
 
     try {
       const guild = interaction.guild;
@@ -150,8 +155,8 @@ client.on('interactionCreate', async (interaction) => {
 
       interaction.editReply(
         `✅ **${unassigned.size} membres assignés !**\n` +
-        `🦋 Papillons : +${assignedCount[role1.name]} → **${finalCount1} total**\n` +
-        `🐉 Dragons : +${assignedCount[role2.name]} → **${finalCount2} total**`
+        `${EMOJI_1} ${NOM_1} : +${assignedCount[role1.name]} → **${finalCount1} total**\n` +
+        `${EMOJI_2} ${NOM_2} : +${assignedCount[role2.name]} → **${finalCount2} total**`
       );
     } catch (err) {
       console.error('❌ Erreur /assignroles :', err);
@@ -164,9 +169,9 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.deferReply();
 
     const choix = interaction.options.getString('nom');
-    const roleId = choix === 'papillons' ? ROLE_1_ID : ROLE_2_ID;
-    const emoji = choix === 'papillons' ? '🦋' : '🐉';
-    const nom = choix === 'papillons' ? 'Papillons' : 'Dragons';
+    const roleId = choix === 'equipe1' ? ROLE_1_ID : ROLE_2_ID;
+    const emoji = choix === 'equipe1' ? EMOJI_1 : EMOJI_2;
+    const nom = choix === 'equipe1' ? NOM_1 : NOM_2;
 
     const guild = interaction.guild;
     await guild.members.fetch();
@@ -219,56 +224,55 @@ client.on('interactionCreate', async (interaction) => {
     const BARRE_TAILLE = 20;
     const blocs1 = total === 0 ? 10 : Math.round((count1 / total) * BARRE_TAILLE);
     const blocs2 = BARRE_TAILLE - blocs1;
-    const barre = `🦋 ${'█'.repeat(blocs1)}${'░'.repeat(blocs2)} 🐉`;
+    const barre = `${EMOJI_1} ${'█'.repeat(blocs1)}${'░'.repeat(blocs2)} ${EMOJI_2}`;
 
     let statut;
     if (count1 === count2) statut = '⚖️ **Égalité parfaite !**';
-    else if (count1 > count2) statut = `🦋 **Papillons en avance** de ${count1 - count2} membre(s)`;
-    else statut = `🐉 **Dragons en avance** de ${count2 - count1} membre(s)`;
+    else if (count1 > count2) statut = `${EMOJI_1} **${NOM_1} en avance** de ${count1 - count2} membre(s)`;
+    else statut = `${EMOJI_2} **${NOM_2} en avance** de ${count2 - count1} membre(s)`;
 
     interaction.editReply(
       `📊 **Statistiques des équipes**\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🦋 **Papillons** : ${count1} membre(s)\n` +
-      `🐉 **Dragons** : ${count2} membre(s)\n` +
+      `${EMOJI_1} **${NOM_1}** : ${count1} membre(s)\n` +
+      `${EMOJI_2} **${NOM_2}** : ${count2} membre(s)\n` +
       `👥 **Total** : ${total} membre(s)\n\n` +
       `${barre}\n\n` +
       `${statut}`
     );
   }
-  //resetroles
+
+  // /resetroles
   if (interaction.commandName === 'resetroles') {
     if (!interaction.member.permissions.has('Administrator')) {
-      return interaction.reply({ content: '❌ Tu dois être administrateur.', ephemeral: true });
+      return interaction.reply({ content: '❌ Tu dois être administrateur.', flags: 64 });
     }
-  
-    await interaction.deferReply({ ephemeral: true });
-  
+
+    await interaction.deferReply({ flags: 64 });
+
     try {
       const guild = interaction.guild;
       const role1 = guild.roles.cache.get(ROLE_1_ID);
       const role2 = guild.roles.cache.get(ROLE_2_ID);
-  
+
       if (!role1 || !role2) return interaction.editReply('❌ Rôles introuvables.');
-  
+
       const members = await guild.members.fetch();
-  
       const assigned = members.filter(m =>
         !m.user.bot &&
         (m.roles.cache.has(ROLE_1_ID) || m.roles.cache.has(ROLE_2_ID))
       );
-  
+
       if (assigned.size === 0) {
         return interaction.editReply('✅ Aucun membre n\'a de rôle d\'équipe !');
       }
-  
+
       for (const [, member] of assigned) {
         if (member.roles.cache.has(ROLE_1_ID)) await member.roles.remove(role1);
         if (member.roles.cache.has(ROLE_2_ID)) await member.roles.remove(role2);
       }
-  
-      interaction.editReply(`✅ **${assigned.size} membres réinitialisés !** Les rôles Papillons et Dragons ont été retirés.`);
-  
+
+      interaction.editReply(`✅ **${assigned.size} membres réinitialisés !** Les rôles ont été retirés.`);
     } catch (err) {
       console.error('❌ Erreur /resetroles :', err);
       interaction.editReply('❌ Une erreur est survenue.');
